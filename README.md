@@ -1,56 +1,47 @@
-# Welcome to your Expo app 👋
+# IoT Sensor Monitoring System
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+Expo SDK 58 + React Native + TypeScript frontend for TOF distance, calibrated light intensity, and soil moisture readings from an ESP32 through a Raspberry Pi API.
 
-## Get started
+## Run in Expo Go
 
-1. Install dependencies
-
-   ```bash
-   npm install
-   ```
-
-2. Start the app
-
-   ```bash
-   npx expo start
-   ```
-
-In the output, you'll find options to open the app in a
-
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
-
-You can start developing by editing the files inside the **src/app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
-
-## Get a fresh project
-
-When you're ready, run:
-
-```bash
-npm run reset-project
+```sh
+npm install
+npm start
 ```
 
-This command will move the starter code to the **example** directory and create a blank **src/app** directory where you can start developing.
+Scan the QR code with Expo Go. Keep the phone and Raspberry Pi on the same Wi-Fi network. In Settings, enter the Pi's LAN address (for example `http://192.168.1.50`), API port (default `8080`), and refresh interval. Save settings, then use **Test connection**. Use the Pi's local network address rather than `localhost` from a phone. The server must permit requests from the phone; web builds also need suitable CORS headers.
 
-### Other setup steps
+## API contract used by this app
 
-- To set up ESLint for linting, run `npx expo lint`, or follow our guide on ["Using ESLint and Prettier"](https://docs.expo.dev/guides/using-eslint/)
-- If you'd like to set up unit testing, follow our guide on ["Unit Testing with Jest"](https://docs.expo.dev/develop/unit-testing/)
-- Learn more about the TypeScript setup in this template in our guide on ["Using TypeScript"](https://docs.expo.dev/guides/typescript/)
+The current endpoint is `GET http://<host>:<port>/api/readings/current`. It may return a reading directly or under a `reading` key:
 
-## Learn more
+```json
+{
+  "tof_distance_mm": 125.5,
+  "light_lux": 350,
+  "soil_moisture_percent": 62,
+  "timestamp": "2026-10-24T10:00:00Z"
+}
+```
 
-To learn more about developing your project with Expo, look at the following resources:
+The history screen and analytics also request `GET /api/readings?limit=500`, expecting either an array of readings or `{ "readings": [...] }`. The Raspberry Pi backend must validate/store timestamped readings and serve this endpoint for persistent history. Change the route or field mapping in `src/lib/sensors.ts` to match firmware/backend choices. A successful response with at least one finite, nonnegative numeric sensor value is required for Connected status. A missing sensor field is shown as unavailable; stale-value detection depends on timestamps supplied by the API and should be enforced by the backend.
 
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
+For a quick connectivity check on a laptop on the same network, open `http://<host>:<port>/api/readings/current` or run:
 
-## Join the community
+```sh
+curl http://192.168.1.50:8080/api/readings/current
+```
 
-Join our community of developers creating universal apps.
+An unavailable server produces an error on the dashboard and a failed connection test. No sample readings are bundled.
 
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+## Project structure
+
+- `src/app/`: dashboard, analytics, history, and settings routes.
+- `src/components/sensor-ui.tsx`: reusable cards, chart, panels, and visual styles.
+- `src/components/app-tabs.tsx` / `app-tabs.web.tsx`: native and web tab navigation.
+- `src/lib/sensors.ts`: API requests, field validation, polling state, and session history.
+
+## What works and backend requirements
+
+- Works in the frontend: polling, refresh, connection/error states, configurable thresholds and polling interval, sensor condition labels, moisture progress bar, period filters, trend plots with selectable points, period min/max/average, searchable history, CSV export through the platform share sheet.
+- Requires the Pi backend: actual sensor values, durable timestamped history, correct calibration/units, stale-data policy, and any authentication. Current settings and the in-memory fallback history reset when the app process restarts; server history is the durable source of truth.

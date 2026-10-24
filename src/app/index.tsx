@@ -1,98 +1,22 @@
-import * as Device from 'expo-device';
-import { Platform, StyleSheet } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { useEffect } from 'react';
+import { ActivityIndicator, Text, View } from 'react-native';
+import { Button, C, Header, Page, Panel, SensorCard, s } from '@/components/sensor-ui';
+import { fetchCurrent, useSensors } from '@/lib/sensors';
 
-import { AnimatedIcon } from '@/components/animated-icon';
-import { HintRow } from '@/components/hint-row';
-import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
-import { WebBadge } from '@/components/web-badge';
-import { BottomTabInset, MaxContentWidth, Spacing } from '@/constants/theme';
-
-function getDevMenuHint() {
-  if (Platform.OS === 'web') {
-    return <ThemedText type="small">use browser devtools</ThemedText>;
-  }
-  if (Device.isDevice) {
-    return (
-      <ThemedText type="small">
-        shake device or press <ThemedText type="code">m</ThemedText> in terminal
-      </ThemedText>
-    );
-  }
-  const shortcut = Platform.OS === 'android' ? 'cmd+m (or ctrl+m)' : 'cmd+d';
-  return (
-    <ThemedText type="small">
-      press <ThemedText type="code">{shortcut}</ThemedText>
-    </ThemedText>
-  );
+export default function Dashboard() {
+  const { reading, records, connected, loading, error, updatedAt, settings } = useSensors();
+  useEffect(() => { fetchCurrent(); const timer = setInterval(fetchCurrent, Math.max(5, settings.interval) * 1000); return () => clearInterval(timer); }, [settings.baseUrl, settings.port, settings.interval]);
+  const d = reading?.tof_distance_mm, l = reading?.light_lux, m = reading?.soil_moisture_percent;
+  const isStale = !!updatedAt && Date.now() - Date.parse(updatedAt) > Math.max(15, settings.interval * 3) * 1000;
+  const tofStatus = d == null ? 'No reading' : d < settings.tofMin || d > settings.tofMax ? 'Out of range' : 'Normal';
+  const lightStatus = l == null ? 'No reading' : l < settings.lightLow ? 'Dark' : l > settings.lightHigh ? 'Bright' : 'Normal';
+  const soilStatus = m == null ? 'No reading' : m < settings.soilDry ? 'Dry' : m > settings.soilWet ? 'Wet' : 'Normal';
+  return <Page><Header eyebrow="IoT sensor monitoring system" title="Dashboard" detail="Live conditions from your sensor network." /><View style={{ alignItems: 'flex-start', marginTop: -10, marginBottom: 14 }}><Button label={loading ? 'Refreshing…' : '↻ Refresh readings'} onPress={fetchCurrent} disabled={loading} /></View>
+    <Panel style={{ marginBottom: 16, backgroundColor: connected && !isStale ? '#EAF4ED' : C.card }}><View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}><Text style={{ fontWeight: '700', color: C.ink }}>Raspberry Pi connection</Text><Text style={{ color: connected && !isStale ? C.green : C.orange, fontSize: 12, fontWeight: '800' }}>● {connected ? isStale ? 'STALE DATA' : 'CONNECTED' : 'DISCONNECTED'}</Text></View><Text style={[s.muted, { marginTop: 7 }]}>{updatedAt ? `Last update · ${new Date(updatedAt).toLocaleString()}` : 'Waiting for a valid server reading'}</Text>{isStale ? <Text style={{ color: C.orange, fontSize: 12, marginTop: 5 }}>The latest timestamp is older than three refresh intervals.</Text> : null}</Panel>
+    {loading && !reading && <ActivityIndicator color={C.green} style={{ marginVertical: 12 }} />}{error ? <Panel style={{ marginBottom: 14, borderColor: '#E9C8C1' }}><Text style={{ color: C.red, fontWeight: '700', marginBottom: 4 }}>Unable to retrieve sensor data</Text><Text style={s.muted}>{error}</Text></Panel> : null}
+    <SensorCard type="TOF distance" value={d} unit="mm" status={tofStatus} note={d == null ? 'No valid measurement received' : `Allowed range ${settings.tofMin}–${settings.tofMax} mm`} color={tofStatus === 'Out of range' ? C.orange : C.green} />
+    <SensorCard type="Light intensity" value={l} unit="lx" status={lightStatus} note={l == null ? 'Lux is shown only when the API provides calibrated lux' : `Low ${settings.lightLow} lx · high ${settings.lightHigh} lx`} color={lightStatus === 'Dark' || lightStatus === 'Bright' ? C.orange : C.blue} />
+    <SensorCard type="Soil moisture" value={m} unit="%" status={soilStatus} note={m == null ? 'No valid measurement received' : `Desired range ${settings.soilTargetMin}–${settings.soilTargetMax}%`} color={soilStatus === 'Dry' || soilStatus === 'Wet' ? C.orange : C.green} progress={m} />
+    <Text style={[s.muted, { textAlign: 'center', marginTop: 4 }]}>{records.length ? `${records.length} readings available in this session` : 'Historical readings will appear when provided by your API.'}</Text>
+  </Page>;
 }
-
-export default function HomeScreen() {
-  return (
-    <ThemedView style={styles.container}>
-      <SafeAreaView style={styles.safeArea}>
-        <ThemedView style={styles.heroSection}>
-          <AnimatedIcon />
-          <ThemedText type="title" style={styles.title}>
-            Welcome to&nbsp;Expo
-          </ThemedText>
-        </ThemedView>
-
-        <ThemedText type="code" style={styles.code}>
-          get started
-        </ThemedText>
-
-        <ThemedView type="backgroundElement" style={styles.stepContainer}>
-          <HintRow
-            title="Try editing"
-            hint={<ThemedText type="code">src/app/index.tsx</ThemedText>}
-          />
-          <HintRow title="Dev tools" hint={getDevMenuHint()} />
-          <HintRow
-            title="Fresh start"
-            hint={<ThemedText type="code">npm run reset-project</ThemedText>}
-          />
-        </ThemedView>
-
-        {Platform.OS === 'web' && <WebBadge />}
-      </SafeAreaView>
-    </ThemedView>
-  );
-}
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    justifyContent: 'center',
-    flexDirection: 'row',
-  },
-  safeArea: {
-    flex: 1,
-    paddingHorizontal: Spacing.four,
-    alignItems: 'center',
-    gap: Spacing.three,
-    paddingBottom: BottomTabInset + Spacing.three,
-    maxWidth: MaxContentWidth,
-  },
-  heroSection: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    flex: 1,
-    paddingHorizontal: Spacing.four,
-    gap: Spacing.four,
-  },
-  title: {
-    textAlign: 'center',
-  },
-  code: {
-    textTransform: 'uppercase',
-  },
-  stepContainer: {
-    gap: Spacing.three,
-    alignSelf: 'stretch',
-    paddingHorizontal: Spacing.three,
-    paddingVertical: Spacing.four,
-    borderRadius: Spacing.four,
-  },
-});

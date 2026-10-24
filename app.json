@@ -1,12 +1,12 @@
 {
   "expo": {
-    "name": "MyExpoApp",
+    "name": "IoT Sensor Monitoring System",
     "slug": "MyExpoApp",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "myexpoapp",
-    "userInterfaceStyle": "automatic",
+    "userInterfaceStyle": "light",
     "ios": {
       "icon": "./assets/expo.icon"
     },
