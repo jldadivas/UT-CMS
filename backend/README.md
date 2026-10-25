@@ -34,7 +34,7 @@ The backend loads values from the local `.env` file; process environment variabl
 
 ## Soil calibration
 
-The firmware publishes `soil_raw`, not a percentage. Measure `soil_raw` when the probe is dry and when it is wet, then set `SOIL_DRY_RAW` and `SOIL_WET_RAW`. The service linearly maps the measured dry value to 0% and wet value to 100%, clamps intermediate values, and retains the raw value in the API. Reversed sensor polarity is supported. Until both values are configured, the API returns `soil_moisture_percent: null`, so the app correctly shows no calibrated reading.
+The firmware publishes `soil_raw`, not a percentage. The current calibration maps dry raw value `2527` to 0% and wet raw value `1237` to 100%. The service linearly maps between them, clamps intermediate values, and retains the raw value in the API. Reversed sensor polarity is supported. To recalibrate, set `SOIL_DRY_RAW` and `SOIL_WET_RAW` in `.env` and restart the service.
 
 ## MQTT mapping and API
 

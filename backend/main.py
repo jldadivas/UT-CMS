@@ -27,8 +27,8 @@ MQTT_USER = os.getenv("MQTT_USER", "")
 MQTT_PASSWORD = os.getenv("MQTT_PASSWORD", "")
 DATA_TOPIC = os.getenv("MQTT_DATA_TOPIC", "esp32/tof_light_soil_data")
 STATUS_TOPIC = os.getenv("MQTT_STATUS_TOPIC", "esp32/tof_light_soil_status")
-SOIL_DRY_RAW = os.getenv("SOIL_DRY_RAW", "").strip() or None
-SOIL_WET_RAW = os.getenv("SOIL_WET_RAW", "").strip() or None
+SOIL_DRY_RAW = os.getenv("SOIL_DRY_RAW", "").strip() or "2527"
+SOIL_WET_RAW = os.getenv("SOIL_WET_RAW", "").strip() or "1237"
 
 _db_lock = threading.Lock()
 _mqtt_client: mqtt.Client | None = None
