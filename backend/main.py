@@ -26,8 +26,8 @@ MQTT_USER = os.getenv("MQTT_USER", "")
 MQTT_PASSWORD = os.getenv("MQTT_PASSWORD", "")
 DATA_TOPIC = os.getenv("MQTT_DATA_TOPIC", "esp32/tof_light_soil_data")
 STATUS_TOPIC = os.getenv("MQTT_STATUS_TOPIC", "esp32/tof_light_soil_status")
-SOIL_DRY_RAW = os.getenv("SOIL_DRY_RAW")
-SOIL_WET_RAW = os.getenv("SOIL_WET_RAW")
+SOIL_DRY_RAW = os.getenv("SOIL_DRY_RAW", "").strip() or None
+SOIL_WET_RAW = os.getenv("SOIL_WET_RAW", "").strip() or None
 
 _db_lock = threading.Lock()
 _mqtt_client: mqtt.Client | None = None
@@ -63,7 +63,11 @@ def finite_number(value: Any) -> float | None:
 def soil_percent(raw: int | None) -> float | None:
     if raw is None or SOIL_DRY_RAW is None or SOIL_WET_RAW is None:
         return None
-    dry, wet = float(SOIL_DRY_RAW), float(SOIL_WET_RAW)
+    try:
+        dry, wet = float(SOIL_DRY_RAW), float(SOIL_WET_RAW)
+    except ValueError:
+        LOG.error("SOIL_DRY_RAW and SOIL_WET_RAW must be numbers; soil percentage is unavailable")
+        return None
     if dry == wet:
         LOG.error("SOIL_DRY_RAW and SOIL_WET_RAW must differ")
         return None
