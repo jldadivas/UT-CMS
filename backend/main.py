@@ -16,6 +16,7 @@ from dotenv import load_dotenv
 from fastapi import FastAPI, Query
 from fastapi.middleware.cors import CORSMiddleware
 
+logging.basicConfig(level=os.getenv("LOG_LEVEL", "INFO").upper(), format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 LOG = logging.getLogger("sensor_backend")
 ROOT = Path(__file__).resolve().parent
 load_dotenv(ROOT / ".env")
@@ -31,6 +32,8 @@ SOIL_WET_RAW = os.getenv("SOIL_WET_RAW", "").strip() or None
 
 _db_lock = threading.Lock()
 _mqtt_client: mqtt.Client | None = None
+_mqtt_connected = threading.Event()
+_last_mqtt_message: dict[str, str] = {}
 
 
 def connect_db() -> sqlite3.Connection:
@@ -91,19 +94,31 @@ def store_reading(payload: dict[str, Any]) -> None:
             "INSERT INTO readings(timestamp,tof_distance_mm,light_lux,soil_raw,soil_moisture_percent,rssi) VALUES(?,?,?,?,?,?)",
             (timestamp, tof, lux, raw, soil_percent(raw), rssi),
         )
+    LOG.info("Saved sensor reading: tof_mm=%s lux=%s soil_raw=%s rssi=%s", tof, lux, raw, rssi)
 
 
 def on_connect(client: mqtt.Client, _userdata: Any, _flags: Any, reason_code: Any, _properties: Any = None) -> None:
     if reason_code == 0:
+        _mqtt_connected.set()
         LOG.info("Connected to MQTT broker at %s:%s", MQTT_HOST, MQTT_PORT)
-        client.subscribe([(DATA_TOPIC, 0), (STATUS_TOPIC, 1)])
+        result, _mid = client.subscribe([(DATA_TOPIC, 0), (STATUS_TOPIC, 1)])
+        LOG.info("Subscribed to %s and %s (result=%s)", DATA_TOPIC, STATUS_TOPIC, result)
     else:
+        _mqtt_connected.clear()
         LOG.error("MQTT connection failed: %s", reason_code)
+
+
+def on_disconnect(_client: mqtt.Client, _userdata: Any, _disconnect_flags: Any, reason_code: Any, _properties: Any = None) -> None:
+    _mqtt_connected.clear()
+    LOG.warning("Disconnected from MQTT broker (reason=%s); reconnect will be attempted", reason_code)
 
 
 def on_message(_client: mqtt.Client, _userdata: Any, msg: mqtt.MQTTMessage) -> None:
     try:
         decoded = msg.payload.decode("utf-8")
+        received_at = datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
+        _last_mqtt_message.update(topic=msg.topic, received_at=received_at)
+        LOG.info("Received MQTT message on %s (%d bytes)", msg.topic, len(msg.payload))
         if msg.topic == STATUS_TOPIC:
             LOG.info("ESP32 status: %s", decoded)
             return
@@ -121,9 +136,11 @@ async def lifespan(_app: FastAPI):
     if MQTT_USER:
         _mqtt_client.username_pw_set(MQTT_USER, MQTT_PASSWORD)
     _mqtt_client.on_connect = on_connect
+    _mqtt_client.on_disconnect = on_disconnect
     _mqtt_client.on_message = on_message
     _mqtt_client.reconnect_delay_set(min_delay=1, max_delay=30)
     try:
+        LOG.info("Starting sensor API on port 8080; broker=%s:%s data_topic=%s", MQTT_HOST, MQTT_PORT, DATA_TOPIC)
         _mqtt_client.connect_async(MQTT_HOST, MQTT_PORT, keepalive=30)
         _mqtt_client.loop_start()
     except Exception:
@@ -165,5 +182,15 @@ def reading_history(limit: int = Query(default=500, ge=1, le=5000)) -> dict[str,
 
 
 @app.get("/api/health")
-def health() -> dict[str, str]:
-    return {"status": "ok", "mqtt_data_topic": DATA_TOPIC}
+def health() -> dict[str, Any]:
+    with connect_db() as conn:
+        count = conn.execute("SELECT COUNT(*) FROM readings").fetchone()[0]
+    return {
+        "status": "ok",
+        "mqtt_connected": _mqtt_connected.is_set(),
+        "mqtt_broker": f"{MQTT_HOST}:{MQTT_PORT}",
+        "mqtt_data_topic": DATA_TOPIC,
+        "mqtt_status_topic": STATUS_TOPIC,
+        "last_mqtt_message": _last_mqtt_message or None,
+        "stored_readings": count,
+    }

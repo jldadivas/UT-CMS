@@ -48,6 +48,8 @@ The service subscribes to `esp32/tof_light_soil_data` and `esp32/tof_light_soil_
 
 - `GET /api/readings/current` returns `{ "reading": ... }`, or `{ "reading": null }` before the first MQTT reading.
 - `GET /api/readings?limit=500` returns `{ "readings": [...] }`, newest first.
-- `GET /api/health` reports whether the HTTP service is running.
+- `GET /api/health` reports HTTP status, MQTT connection state, broker/topic settings, the last MQTT message time/topic, and how many readings are stored.
+
+The terminal running Uvicorn prints a startup line with the broker and topic, logs when MQTT connects/subscribes, and logs each message received and reading saved. If the app test fails, open `http://<pi-ip>:8080/api/health` from a device on the same Wi-Fi. If `mqtt_connected` is false, check `MQTT_HOST`/credentials and the Mosquitto service. If it is true but `last_mqtt_message` is null, check that the sketch publishes to the same broker and `MQTT_DATA_TOPIC`. If `last_mqtt_message` advances and `stored_readings` increases, but the app fails, check the app's server IP and port (8080) and that TCP 8080 is allowed through the Pi firewall.
 
 SQLite data is stored at `backend/sensor_readings.sqlite3` by default. Set `SENSOR_DB_PATH` to a persistent path when deploying. No Expo or firmware route changes are needed.
