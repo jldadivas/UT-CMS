@@ -18,12 +18,31 @@ export const subscribe = (listener: () => void) => { listeners.push(listener); r
 export const snapshot = (): SensorState => currentSnapshot;
 export function useSensors() { return useSyncExternalStore(subscribe, snapshot, snapshot); }
 export function updateSettings(next: Partial<Settings>) { settings = { ...settings, ...next }; emit(); }
+
+function getApiBaseUrl(): string {
+  const address = settings.baseUrl.trim();
+  if (!address) throw new Error('Enter your Raspberry Pi IP address in Settings.');
+  const withScheme = /^[a-z][a-z\d+.-]*:\/\//i.test(address) ? address : `http://${address}`;
+  const match = /^(https?):\/\/([^/?#]+)(?:[/?#].*)?$/i.exec(withScheme);
+  if (!match) throw new Error('Invalid server address. Enter the Pi IP, for example 192.168.1.50.');
+  const protocol = match[1].toLowerCase();
+  const authority = match[2];
+  const hostname = authority.startsWith('[')
+    ? authority.replace(/\]:\d+$/, ']')
+    : authority.replace(/:\d+$/, '');
+  if (!hostname || /\s|@/.test(hostname) || (!hostname.startsWith('[') && hostname.includes(':')) || (hostname.startsWith('[') && !hostname.endsWith(']'))) {
+    throw new Error('Invalid server address. Enter the Pi IP, for example 192.168.1.50.');
+  }
+  const port = settings.port.trim() || '8080';
+  if (!/^\d{1,5}$/.test(port) || Number(port) < 1 || Number(port) > 65535) throw new Error('API port must be a number from 1 to 65535.');
+  return `${protocol}://${hostname}:${port}`;
+}
+
 export async function fetchCurrent() {
   if (!settings.baseUrl.trim()) { error = 'Add your Raspberry Pi server address in Settings to connect.'; connected = false; emit(); return; }
   loading = true; error = ''; emit();
-  const base = `${settings.baseUrl.trim().replace(/\/$/, '').replace(/:\d+$/, '')}:${settings.port || '8080'}`;
   try {
-    const response = await fetch(`${base}/api/readings/current`, { signal: AbortSignal.timeout(8000) });
+    const response = await fetch(`${getApiBaseUrl()}/api/readings/current`, { signal: AbortSignal.timeout(8000) });
     if (!response.ok) throw new Error(`Server returned ${response.status}`);
     const payload = await response.json();
     const candidate = payload.reading ?? payload;
@@ -44,7 +63,6 @@ export async function testConnection() {
 }
 export function loadHistory() {
   const baseUrl = settings.baseUrl.trim(); if (!baseUrl) return;
-  const base = `${baseUrl.replace(/\/$/, '').replace(/:\d+$/, '')}:${settings.port || '8080'}`;
-  fetch(`${base}/api/readings?limit=500`).then((response) => { if (!response.ok) throw new Error('History unavailable'); return response.json(); })
+  fetch(`${getApiBaseUrl()}/api/readings?limit=500`).then((response) => { if (!response.ok) throw new Error('History unavailable'); return response.json(); })
     .then((payload) => { const data: unknown = Array.isArray(payload) ? payload : payload.readings; if (Array.isArray(data)) { records = data.filter((item): item is Reading => !!item && typeof item === 'object' && typeof (item as Reading).timestamp === 'string'); emit(); } }).catch(() => {});
 }
